@@ -291,13 +291,13 @@ function parseData(text){
     size:['size','pack','packsize','volume'],rrp:['rrp','was','wasprice','recommended','listprice'],
     price:['price','sell','sellprice','ourprice','retail'],promo:['promo','promoprice','special','saleprice','sale','now','nowprice'],
     pct:['pct','percentoff','percentageoff','percent','off'],qty:['qty','multiqty','multibuyqty'],for:['for','multiprice','forprice','multibuyprice','dealprice'],
-    colour:['colour','color','theme'],flash:['flash','tag','callout','banner','members','memberprice'],barcode:['barcode','apn','ean','plu','sku','itemcode','code']};
+    copies:['copies','copy','instances','prints','quantity'],colour:['colour','color','theme'],flash:['flash','tag','callout','banner','members','memberprice'],barcode:['barcode','apn','ean','plu','sku','itemcode','code']};
   const header=split(lines[0]).map(norm);
   const isHeader=header.some(h=>Object.values(alias).flat().includes(h));
   const map={};if(isHeader)header.forEach((h,i)=>{for(const k in alias)if(map[k]==null&&alias[k].includes(h))map[k]=i;});else{map.brand=0;map.price=1;map.size=2;}
   const dl=isHeader?lines.slice(1):lines;
   return dl.map(l=>{const c=split(l);const g=k=>map[k]!=null?(c[map[k]]||''):'';const col=(g('colour')||'').toLowerCase();
-    return{brand:g('brand'),desc:g('desc'),size:g('size'),rrp:clean(g('rrp')),price:clean(g('price')),promo:clean(g('promo')),
+    return{brand:g('brand'),desc:g('desc'),size:g('size'),copies:clean(g('copies'))||'1',rrp:clean(g('rrp')),price:clean(g('price')),promo:clean(g('promo')),
       pct:clean(g('pct')),qty:clean(g('qty')),for:clean(g('for')),colour:COLOURS[col]?col:'blue',flash:g('flash'),barcode:g('barcode').replace(/[^0-9]/g,'')};
   }).filter(p=>p.brand);
 }
@@ -323,6 +323,7 @@ function renderCards(){
         <div class="f"><span>Multibuy qty</span><input class="i" data-f="qty" value="${esc(p.qty)}"></div>
         <div class="f"><span>…for $</span><input class="i" data-f="for" value="${esc(p.for)}"></div>
         <div class="f wide"><span>Flash</span><input class="i" data-f="flash" value="${esc(p.flash)}"></div>
+        <div class="f"><span>Copies</span><input class="i" data-f="copies" value="${esc(p.copies||'1')}"></div>
         <div class="f wide"><span>Barcode</span><input class="i" data-f="barcode" value="${esc(p.barcode)}"></div>
       </div>`;
     c.querySelectorAll('input').forEach(inp=>inp.addEventListener('input',e=>{state.products[i][e.target.dataset.f]=e.target.value;renderSheets();}));
@@ -426,15 +427,16 @@ function fitAll(){requestAnimationFrame(()=>{
 function renderSheets(){
   const host=$('#sheets');
   if(!state.products.length){host.innerHTML=`<div class="empty">No labels yet. Add one manually, or import a Z Software export.</div>`;$('#pageInfo').textContent='';return;}
-  const per=PER[state.size],pages=Math.ceil(state.products.length/per);let html='';
-  for(let pg=0;pg<pages;pg++){const slice=state.products.slice(pg*per,(pg+1)*per);
+  const expanded=[];state.products.forEach(p=>{const n=Math.max(1,Math.min(200,parseInt(p.copies)||1));for(let k=0;k<n;k++)expanded.push(p);});
+  const per=PER[state.size],pages=Math.ceil(expanded.length/per);let html='';
+  for(let pg=0;pg<pages;pg++){const slice=expanded.slice(pg*per,(pg+1)*per);
     html+=`<div class="sheet" data-size="${state.size}">${slice.map(ticketHTML).join('')}</div>`;}
   host.innerHTML=html;
   host.querySelectorAll('svg[data-bc]').forEach(svg=>{const code=svg.getAttribute('data-bc').replace(/\s/g,'');
     try{const ean=/^\d{13}$/.test(code);JsBarcode(svg,code,{format:ean?'EAN13':'CODE128',displayValue:true,fontSize:12,height:30,margin:0,background:'transparent'});}
     catch(e){try{JsBarcode(svg,code,{format:'CODE128',displayValue:true,fontSize:12,height:30,margin:0,background:'transparent'});}catch(_){}}});
   fitAll();
-  $('#pageInfo').textContent=`${state.products.length} tickets · ${pages} page${pages>1?'s':''} · ${per}/A4 · ${state.design}`;
+  $('#pageInfo').textContent=`${expanded.length} tickets · ${pages} page${pages>1?'s':''} · ${per}/A4 · ${state.design}`;
 }
 
 /* ---------- wiring ---------- */
@@ -445,7 +447,7 @@ $('#psizeSeg').addEventListener('click',e=>{const b=e.target.closest('button');i
 $('#loadCsv').addEventListener('click',()=>{state.products=parseData($('#csv').value);renderCards();renderSheets();});
 $('#pickFile').addEventListener('click',()=>$('#file').click());
 $('#file').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{$('#csv').value=r.result;state.products=parseData(r.result);renderCards();renderSheets();};r.readAsText(f);});
-$('#addRow').addEventListener('click',()=>{state.products.push({brand:'',desc:'',size:'',rrp:'',price:'',promo:'',pct:'',qty:'',for:'',colour:'blue',flash:'',barcode:''});renderCards();renderSheets();const c=$('#cards').children;c[c.length-1].querySelector('input').focus();});
+$('#addRow').addEventListener('click',()=>{state.products.push({brand:'',desc:'',size:'',copies:'1',rrp:'',price:'',promo:'',pct:'',qty:'',for:'',colour:'blue',flash:'',barcode:''});renderCards();renderSheets();const c=$('#cards').children;c[c.length-1].querySelector('input').focus();});
 function doPrint(){
   const sheets=document.getElementById('sheets').innerHTML;
   if(!sheets||sheets.indexOf('sheet')<0){alert('Add at least one label first.');return;}
